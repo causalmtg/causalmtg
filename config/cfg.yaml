@@ -1,0 +1,6 @@
+# config.yaml
+paths:
+  data_dir: data/mtg
+  results_dir: "./results"
+  prefer_committed_data: true
+  fail_duplicate: true          # Toggle for conflict behavior
