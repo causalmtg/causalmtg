@@ -85,6 +85,13 @@ def instrument_diagnostic(ctx, set_code):
 
 @cli.command()
 @click.argument("set_code", type=str)
+@click.pass_context
+def slot_diagnostic(ctx, set_code):
+    pipeline.slot_diagnostic(ctx.obj.cfg, set_code)
+
+
+@cli.command()
+@click.argument("set_code", type=str)
 @click.option("--split", type=int, default=None)
 @click.pass_context
 def extract_baseline_features(ctx, set_code, split=None):

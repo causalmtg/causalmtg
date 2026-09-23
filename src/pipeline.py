@@ -32,9 +32,11 @@ def get_hparams_profile_path(cfg, set_code, profile, seed):
     return cfg.paths.results_dir / INTERMEDIATE_DIR / set_code / "profiles" / profile / f"{seed}.json"
 
 
-def build_extractor(cfg, set_code, split=None, extractor_class=DraftDataExtractor, extractor_variant=None):
+def build_extractor(cfg, set_code, split=None, extractor_class=DraftDataExtractor, 
+                    pairs_df=None, extractor_variant=None):
     datapath = config.DataPath(cfg)
-    pairs_df = pd.read_csv(build.get_reference_effect_path(cfg, set_code, split=split))
+    if pairs_df is None:
+        pairs_df = pd.read_csv(build.get_reference_effect_path(cfg, set_code, split=split))
     card_a_names=pairs_df['card_a'].unique().tolist()
 
     grouping = fetch.get_card_groups(datapath, set_code)
@@ -204,9 +206,36 @@ def instrument_diagnostic(cfg, set_code):
     card_a_list = sorted(list(pairs_df['card_a'].unique()))
     dest_path = cfg.paths.results_dir / INTERMEDIATE_DIR / set_code / "diagnostic" /  f"exclusion_diagnostic.csv"
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-    extractor = build_extractor(cfg, set_code, 
-                                extractor_class=diagnostic.PlayerDraftDataExtractor, 
-                                extractor_variant="pid")    
+    extractor = build_extractor(cfg, set_code)    
+    diag = diagnostic.ExactMatchExclusionDiagnostic(extractor)
+    res = diag.get_estimates(pairs_df)
+    if 'set_code' not in res.columns:
+        res.insert(0, 'set_code', set_code)
+    logging.info(f"saving => {dest_path}")
+    res.to_csv(dest_path, index=False)
+
+def slot_diagnostic(cfg, set_code):
+    logging.info(f"diagnostic {set_code}")    
+    datapath = config.DataPath(cfg)
+    metadata = fetch.get_card_metadata(datapath, set_code)
+    grouping = fetch.get_card_groups(datapath, set_code)
+    rares = [k for k,v in  metadata.items() if v['rarity'] in ['rare','mythic'] ]
+    pickstats = fetch.get_card_picks(datapath, set_code)    
+    card_a_list = ([x['card_name'] for x in pickstats if x['card_name'] in rares and  
+                    x["p2p1_picked"] > 500 and x["p2p1_picked"] / x["p2p1_offered"] < 0.3])
+    card_a_list = sorted(list(set(card_a_list)))
+    outcomes = sorted(list(set(grouping.values())))
+                         
+
+    dest_path = cfg.paths.results_dir / INTERMEDIATE_DIR / set_code / "diagnostic" /  f"slot_diagnostic.csv"
+    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+    pairs_df = pd.DataFrame([
+        dict(set_code=set_code, card_a=card_a, group_b=group_b)
+        for card_a in card_a_list
+        for group_b in outcomes
+     ])
+
+    extractor = build_extractor(cfg, set_code, pairs_df=pairs_df, extractor_variant='slots')    
     diag = diagnostic.ExactMatchExclusionDiagnostic(extractor)
     res = diag.get_estimates(pairs_df)
     if 'set_code' not in res.columns:
